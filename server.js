@@ -62,6 +62,10 @@ const bookingRoutes = require('./routes/booking')
 
 app.use('/api/booking', bookingRoutes)
 
+// Route autentikasi (Register dan Login)
+const authRoutes = require('./routes/auth')
+app.use('/api/auth', authRoutes)
+
 app.listen(PORT, () => {
   console.log(`Server BARBERBOOK berjalan di http://localhost:${PORT}`)
 })

@@ -2,8 +2,11 @@
 const express = require('express')
 const router = express.Router()
 const db = require('../config/database')
+const { verifyToken, verifyRole } = require('../middleware/auth')
 
-// Menampilkan semua booking
+// ==========================================
+// GET: Menampilkan semua booking
+// ==========================================
 router.get('/', async (req, res) => {
   try {
     const [rows] = await db.query(`
@@ -31,9 +34,48 @@ router.get('/', async (req, res) => {
   }
 })
 
-// Membuat booking baru
-router.post('/', async (req, res) => {
-  const { barber_id, layanan_id, nama_pelanggan, tanggal, jam } = req.body
+// ==========================================
+// GET: Riwayat booking pelanggan
+// ==========================================
+router.get('/saya', verifyToken, verifyRole('pelanggan'), async (req, res) => {
+  try {
+    const [rows] = await db.query(`
+      SELECT
+        booking.*,
+        barber.nama AS nama_barber,
+        layanan.nama_layanan,
+        layanan.harga,
+        layanan.durasi
+      FROM booking
+      JOIN barber ON booking.barber_id = barber.id
+      JOIN layanan ON booking.layanan_id = layanan.id
+      WHERE booking.user_id = ?
+      ORDER BY booking.created_at DESC
+    `, [req.user.id])
+
+    res.json({
+      status: 'success',
+      data: rows
+    })
+  } catch (error) {
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    })
+  }
+})
+
+// ==========================================
+// POST: Membuat booking baru
+// ==========================================
+router.post('/', verifyToken, async (req, res) => {
+  const {
+    barber_id,
+    layanan_id,
+    nama_pelanggan,
+    tanggal,
+    jam
+  } = req.body
 
   if (!barber_id || !layanan_id || !nama_pelanggan || !tanggal || !jam) {
     return res.status(400).json({
@@ -63,6 +105,7 @@ router.post('/', async (req, res) => {
 
     if (pilihan.length === 0) {
       await connection.rollback()
+
       return res.status(400).json({
         status: 'error',
         message: 'Barber atau layanan tidak valid'
@@ -90,18 +133,26 @@ router.post('/', async (req, res) => {
 
     if (bentrok.length > 0) {
       await connection.rollback()
+
       return res.status(409).json({
         status: 'error',
         message: 'Jadwal barber sudah terisi pada waktu tersebut'
       })
     }
 
-    // Simpan booking
+    // Simpan booking beserta ID akun pelanggan
     const [result] = await connection.query(`
       INSERT INTO booking
-        (barber_id, layanan_id, nama_pelanggan, tanggal, jam)
-      VALUES (?, ?, ?, ?, ?)
-    `, [barber_id, layanan_id, nama_pelanggan, tanggal, jam])
+        (user_id, barber_id, layanan_id, nama_pelanggan, tanggal, jam)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `, [
+      req.user.id,
+      barber_id,
+      layanan_id,
+      nama_pelanggan,
+      tanggal,
+      jam
+    ])
 
     await connection.commit()
 
