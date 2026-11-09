@@ -7,7 +7,9 @@ const { verifyToken, verifyRole } = require('../middleware/auth')
 // ==========================================
 // GET: Menampilkan semua booking
 // ==========================================
-router.get('/', async (req, res) => {
+
+// GET: Menampilkan semua booking khusus admin
+router.get('/', verifyToken, verifyRole('admin'), async (req, res) => {
   try {
     const [rows] = await db.query(`
       SELECT
@@ -33,6 +35,7 @@ router.get('/', async (req, res) => {
     })
   }
 })
+
 
 // ==========================================
 // GET: Riwayat booking pelanggan
@@ -171,6 +174,66 @@ router.post('/', verifyToken, async (req, res) => {
     })
   } finally {
     if (connection) connection.release()
+  }
+})
+
+
+// ==========================================
+// PUT: Admin menerima atau menolak booking
+// ==========================================
+router.put('/:id/status', verifyToken, verifyRole('admin'), async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    const { status } = req.body
+
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'ID booking tidak valid'
+      })
+    }
+
+    if (!['dikonfirmasi', 'dibatalkan'].includes(status)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Status hanya boleh dikonfirmasi atau dibatalkan'
+      })
+    }
+
+    const [booking] = await db.query(
+      'SELECT id FROM booking WHERE id = ?',
+      [id]
+    )
+
+    if (booking.length === 0) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Booking tidak ditemukan'
+      })
+    }
+
+    await db.query(
+      'UPDATE booking SET status = ? WHERE id = ?',
+      [status, id]
+    )
+
+    return res.json({
+      status: 'success',
+      message: status === 'dikonfirmasi'
+        ? 'Booking berhasil diterima'
+        : 'Booking berhasil ditolak',
+      data: {
+        id,
+        status
+      }
+    })
+  } catch (error) {
+    console.error('Update booking error:', error)
+
+    return res.status(500).json({
+      status: 'error',
+      message: 'Gagal memperbarui status booking'
+    })
   }
 })
 
